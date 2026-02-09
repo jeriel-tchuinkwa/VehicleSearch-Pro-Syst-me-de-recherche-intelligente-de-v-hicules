@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> Système de Gestion de Véhicules</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #581c87 50%, #0f172a 100%);
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(147, 51, 234, 0.2);
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3);
+            transition: all 0.3s ease;
+        }
+        .loader {
+            border: 3px solid rgba(147, 51, 234, 0.3);
+            border-top: 3px solid #9333ea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+        }
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Header -->
+    <header class="glass border-b border-purple-500/20">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <svg class="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    <h1 class="text-2xl font-bold">GESTION DES VEHICULES AVEC MONGO DB</h1>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="showTab('search')" id="btn-search" class="px-4 py-2 bg-purple-600 rounded-lg transition-all hover:bg-purple-700">
+                        Recherche
+                    </button>
+                    <button onclick="showTab('vector')" id="btn-vector" class="px-4 py-2 bg-white/10 rounded-lg transition-all hover:bg-white/20">
+                        ML / VECTEUR
+                    </button>
+                    <button onclick="showTab('stats')" id="btn-stats" class="px-4 py-2 bg-white/10 rounded-lg transition-all hover:bg-white/20">
+                        ECD / EDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-6 py-8">
+        <!-- Message de statut -->
+        <div id="statusMessage" class="mb-6 p-4 glass rounded-lg hidden"></div>
+
+        <!-- Tab 1: Recherche Classique & CRUD -->
+        <div id="tab-search" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Panneau de recherche -->
+                <div class="glass rounded-xl p-6 transition-all">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold"> Recherche de Véhicules</h2>
+                        <button onclick="openCreateModal()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-all flex items-center space-x-2">
+                            <span>+ Nouveau</span>
+                        </button>
+                    </div>
+                    
+                    <div class="relative mb-4">
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            placeholder="Rechercher par Brand ou Model..."
+                            class="w-full px-4 py-3 bg-white/5 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                    </div>
+
+                    <div id="vehicleList" class="space-y-2 max-h-96 overflow-y-auto">
+                        <div class="text-center py-8 text-gray-400">
+                            <div class="loader mx-auto mb-4"></div>
+                            <p>Chargement des véhicules...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panneau de statistiques -->
+                <div class="glass rounded-xl p-6">
+                    <h2 class="text-xl font-semibold mb-4"> Statistiques Générales</h2>
+                    <div id="generalStats" class="space-y-4">
+                        <div class="text-center py-8 text-gray-400">Chargement...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Recherche Vectorielle & ML -->
+        <div id="tab-vector" class="tab-content hidden">
+            <div class="space-y-6">
+                <!-- Recherche vectorielle -->
+                <div class="glass rounded-xl p-6">
+                    <h2 class="text-2xl font-semibold mb-4"> Recherche Vectorielle Sémantique</h2>
+                    <p class="text-gray-400 mb-4">Recherchez des véhicules par description naturelle</p>
+                    <div class="flex space-x-4 mb-6">
+                        <input 
+                            type="text" 
+                            id="vectorSearchInput"
+                            placeholder="Ex: voiture sportive rouge avec moteur puissant..."
+                            class="flex-1 px-4 py-3 bg-white/5 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                        <button onclick="performVectorSearch()" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-all font-semibold">
+                            Rechercher
+                        </button>
+                    </div>
+                    <div id="vectorResults" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+
+                <!-- Bouton ML -->
+                <div class="glass rounded-xl p-6 text-center">
+                    <h3 class="text-xl font-semibold mb-4"> Analyses Machine Learning</h3>
+                    <p class="text-gray-400 mb-4">Générez des analyses prédictives sur votre flotte</p>
+                    <button onclick="loadMLResults()" id="btnLoadML" class="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg transition-all font-semibold text-lg shadow-lg">
+                         Charger les Analyses ML
+                    </button>
+                </div>
+
+                <!-- Résultats ML -->
+                <div id="mlChartsContainer" class="hidden space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="glass rounded-xl p-6">
+                            <h3 class="text-xl font-semibold mb-2"> Random Forest</h3>
+                            <p class="text-sm text-gray-400 mb-4">Classification par catégorie</p>
+                            <div style="position: relative; height: 300px;">
+                                <canvas id="rfChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-6">
+                            <h3 class="text-xl font-semibold mb-2"> XGBoost</h3>
+                            <p class="text-sm text-gray-400 mb-4">Prédiction de prix</p>
+                            <div style="position: relative; height: 300px;">
+                                <canvas id="xgboostChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="glass rounded-xl p-6">
+                        <h3 class="text-xl font-semibold mb-2"> K-Means Clustering</h3>
+                        <p class="text-sm text-gray-400 mb-4">Segmentation des véhicules</p>
+                        <div style="position: relative; height: 400px;">
+                            <canvas id="kmeansChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: Statistiques EDF/CDF -->
+        <div id="tab-stats" class="tab-content hidden">
+            <div class="glass rounded-xl p-6">
+                <h2 class="text-2xl font-semibold mb-4"> Analyse Statistique - EDF/CDF</h2>
+                <p class="text-gray-400 mb-4">Distribution empirique et théorique</p>
+                <div class="flex space-x-4 mb-6">
+                    <select id="variableSelect" class="px-4 py-3 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="Price">Prix</option>
+                        <option value="Kilometres">Kilométrage</option>
+                        <option value="Year">Année</option>
+                        <option value="Engine_Liters">Cylindrée</option>
+                    </select>
+                    <button onclick="generateEDF()" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-all font-semibold">
+                        Générer EDF/CDF
+                    </button>
+                </div>
+                <div id="edfResults">
+                    <div style="position: relative; height: 400px;">
+                        <canvas id="edfChart"></canvas>
+                    </div>
+                    <div id="interpretation" class="mt-6 p-4 bg-blue-500/20 border border-blue-500/50 rounded-lg hidden"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal CRUD -->
+    <div id="crudModal" class="modal">
+        <div class="modal-content glass rounded-xl p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold" id="modalTitle">Nouveau Véhicule</h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            
+            <form id="vehicleForm" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Marque *</label>
+                        <input type="text" id="inputBrand" required
+                            class="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Modèle *</label>
+                        <input type="text" id="inputModel" required
+                            class="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Année</label>
+                        <input type="number" id="inputYear" min="1900" max="2025"
+                            class="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Prix</label>
+                        <input type="number" id="inputPrice" min="0"
+                            class="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Kilométrage</label>
+                        <input type="number" id="inputKilometres" min="0"
+                            class="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Type</label>
+                        <select id="inputCarSuv"
+                            class="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="Car">Car</option>
+                            <option value="SUV">SUV</option>
+                            <option value="Truck">Truck</option>
+                            <option value="Van">Van</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Carburant</label>
+                        <input type="text" id="inputFuelType" placeholder="Ex: Gasoline, Diesel, Electric"
+                            class="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Transmission</label>
+                        <select id="inputTransmission"
+                            class="w-full px-4 py-2 bg-white/5 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="Automatic">Automatique</option>
+                            <option value="Manual">Manuelle</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="flex justify-between pt-4">
+                    <div>
+                        <button type="button" id="btnDelete" onclick="deleteVehicle()" 
+                            class="px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-all hidden">
+                             Supprimer
+                        </button>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button type="button" onclick="closeModal()" 
+                            class="px-6 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg transition-all">
+                            Annuler
+                        </button>
+                        <button type="submit" 
+                            class="px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-all">
+                             Enregistrer
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50">
+        <div class="glass rounded-xl p-8 text-center">
+            <div class="loader mx-auto mb-4"></div>
+            <p class="text-lg" id="loadingText">Chargement en cours...</p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        const ML_API_URL = 'http://localhost:5000/api/ml';
+        let mlChartsInstances = {};
+        let currentVehicleId = null;
+
+        // ============================================
+        // GESTION DES ONGLETS
+        // ============================================
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+            document.querySelectorAll('button[id^="btn-"]').forEach(btn => {
+                btn.classList.remove('bg-purple-600');
+                btn.classList.add('bg-white/10');
+            });
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            document.getElementById(`btn-${tabName}`).classList.remove('bg-white/10');
+            document.getElementById(`btn-${tabName}`).classList.add('bg-purple-600');
+        }
+
+        // ============================================
+        // RECHERCHE
+        // ============================================
+        let searchTimeout;
+        document.getElementById('searchInput').addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => searchVehicles(this.value), 300);
+        });
+
+        async function searchVehicles(query = '') {
+            try {
+                const response = await fetch(`${API_URL}/vehicles/search?query=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayVehicleList(data.data);
+                }
+            } catch (error) {
+                console.error('Erreur recherche:', error);
+                showMessage('Erreur: ' + error.message, 'error');
+            }
+        }
+
+        function displayVehicleList(vehicles) {
+            const container = document.getElementById('vehicleList');
+            if (!vehicles || vehicles.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center py-8">Aucun véhicule trouvé</p>';
+                return;
+            }
+            container.innerHTML = vehicles.map(v => `
+                <div class="p-4 bg-white/5 rounded-lg hover:bg-white/10 cursor-pointer transition-all card-hover" 
+                     onclick="openEditModal('${v._id}')">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h3 class="font-semibold text-lg text-purple-300">${v.Brand || 'N/A'} ${v.Model || 'N/A'}</h3>
+                            <div class="flex space-x-4 text-sm text-gray-400 mt-1">
+                                <span> ${v.Year || 'N/A'}</span>
+                                <span> ${v['Car/Suv'] || 'N/A'}</span>
+                                <span> ${v.Transmission || 'N/A'}</span>
+                            </div>
+                        </div>
+                        <span class="px-3 py-1 bg-purple-600 rounded-full text-sm">${v.Price ? v.Price.toLocaleString() + ' $' : 'N/A'}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // ============================================
+        // CRUD OPERATIONS
+        // ============================================
+        function openCreateModal() {
+            currentVehicleId = null;
+            document.getElementById('modalTitle').textContent = 'Nouveau Véhicule';
+            document.getElementById('vehicleForm').reset();
+            document.getElementById('btnDelete').classList.add('hidden');
+            document.getElementById('crudModal').classList.add('active');
+        }
+
+        async function openEditModal(vehicleId) {
+            try {
+                const response = await fetch(`${API_URL}/vehicles/${vehicleId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentVehicleId = vehicleId;
+                    const v = data.data;
+                    
+                    document.getElementById('modalTitle').textContent = 'Modifier Véhicule';
+                    document.getElementById('inputBrand').value = v.Brand || '';
+                    document.getElementById('inputModel').value = v.Model || '';
+                    document.getElementById('inputYear').value = v.Year || '';
+                    document.getElementById('inputPrice').value = v.Price || '';
+                    document.getElementById('inputKilometres').value = v.Kilometres || '';
+                    document.getElementById('inputCarSuv').value = v['Car/Suv'] || '';
+                    document.getElementById('inputFuelType').value = v.FuelType || '';
+                    document.getElementById('inputTransmission').value = v.Transmission || '';
+                    
+                    document.getElementById('btnDelete').classList.remove('hidden');
+                    document.getElementById('crudModal').classList.add('active');
+                }
+            } catch (error) {
+                showMessage('Erreur lors du chargement', 'error');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('crudModal').classList.remove('active');
+            currentVehicleId = null;
+        }
+
+        document.getElementById('vehicleForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const vehicleData = {
+                Brand: document.getElementById('inputBrand').value,
+                Model: document.getElementById('inputModel').value,
+                Year: parseInt(document.getElementById('inputYear').value) || null,
+                Price: parseFloat(document.getElementById('inputPrice').value) || null,
+                Kilometres: parseFloat(document.getElementById('inputKilometres').value) || null,
+                'Car/Suv': document.getElementById('inputCarSuv').value || null,
+                FuelType: document.getElementById('inputFuelType').value || null,
+                Transmission: document.getElementById('inputTransmission').value || null
+            };
+            
+            try {
+                let response;
+                if (currentVehicleId) {
+                    // UPDATE
+                    response = await fetch(`${API_URL}/vehicles/${currentVehicleId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(vehicleData)
+                    });
+                } else {
+                    // CREATE
+                    response = await fetch(`${API_URL}/vehicles`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(vehicleData)
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(currentVehicleId ? ' Véhicule modifié !' : ' Véhicule créé !', 'success');
+                    closeModal();
+                    searchVehicles(document.getElementById('searchInput').value);
+                    loadGeneralStats();
+                } else {
+                    showMessage(' Erreur: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage(' Erreur: ' + error.message, 'error');
+            }
+        });
+
+        async function deleteVehicle() {
+            if (!currentVehicleId) return;
+            
+            if (!confirm(' Êtes-vous sûr de vouloir supprimer ce véhicule ?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/vehicles/${currentVehicleId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(' Véhicule supprimé !', 'success');
+                    closeModal();
+                    searchVehicles(document.getElementById('searchInput').value);
+                    loadGeneralStats();
+                } else {
+                    showMessage(' Erreur: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage(' Erreur: ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // STATS GÉNÉRALES
+        // ============================================
+        async function loadGeneralStats() {
+            try {
+                const response = await fetch(`${API_URL}/statistics/general`);
+                const data = await response.json();
+                if (data.success) {
+                    const stats = data.data;
+                    document.getElementById('generalStats').innerHTML = `
+                        <div class="grid grid-cols-1 gap-4">
+                            <div class="p-4 bg-purple-600/20 rounded-lg border border-purple-500/30">
+                                <div class="text-3xl font-bold">${stats.totalVehicles.toLocaleString()}</div>
+                                <div class="text-gray-400">Total Véhicules</div>
+                            </div>
+                            <div class="p-4 bg-blue-600/20 rounded-lg border border-blue-500/30">
+                                <div class="text-3xl font-bold">${stats.averagePrice.toLocaleString()} $</div>
+                                <div class="text-gray-400">Prix Moyen</div>
+                            </div>
+                            <div class="p-4 bg-green-600/20 rounded-lg border border-green-500/30">
+                                <div class="text-lg font-bold mb-2">Top 5 Marques</div>
+                                ${stats.topBrands.slice(0, 5).map(b => 
+                                    `<div class="flex justify-between text-sm mt-1">
+                                        <span class="text-gray-300">${b._id}</span>
+                                        <span class="font-semibold text-green-300">${b.count}</span>
+                                    </div>`
+                                ).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Erreur stats:', error);
+            }
+        }
+
+        // ============================================
+        // RECHERCHE VECTORIELLE
+        // ============================================
+        async function performVectorSearch() {
+            const query = document.getElementById('vectorSearchInput').value;
+            if (!query.trim()) {
+                showMessage('Veuillez entrer une description', 'warning');
+                return;
+            }
+            showLoading('Recherche vectorielle...');
+            try {
+                const response = await fetch(`${ML_API_URL}/vector-search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, limit: 12 })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    displayVectorResults(data.data);
+                    showMessage(`${data.count} véhicules trouvés`, 'success');
+                }
+            } catch (error) {
+                showMessage('Service ML non disponible', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayVectorResults(vehicles) {
+            const container = document.getElementById('vectorResults');
+            if (!vehicles || vehicles.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center py-8 col-span-3">Aucun résultat</p>';
+                return;
+            }
+            container.innerHTML = vehicles.map(v => `
+                <div class="p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-all card-hover">
+                    <div class="flex justify-between mb-2">
+                        <h3 class="font-semibold text-purple-300">${v.Brand} ${v.Model}</h3>
+                        <span class="text-xs px-2 py-1 bg-green-600 rounded font-semibold">${(v.similarity * 100).toFixed(1)}%</span>
+                    </div>
+                    <p class="text-sm text-gray-400">${v.Year || 'N/A'} • ${v.FuelType || 'N/A'}</p>
+                    <p class="text-purple-400 font-semibold mt-2">${v.Price ? v.Price.toLocaleString() + ' $' : 'N/A'}</p>
+                </div>
+            `).join('');
+        }
+
+        // ============================================
+        // MACHINE LEARNING
+        // ============================================
+        async function loadMLResults() {
+            const btn = document.getElementById('btnLoadML');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="loader inline-block w-5 h-5 mr-2 border-2"></div> Chargement...';
+            showLoading('Analyse ML en cours...');
+            
+            try {
+                const response = await fetch(`${ML_API_URL}/classify`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    document.getElementById('mlChartsContainer').classList.remove('hidden');
+                    displayMLCharts(data.data);
+                    showMessage(' Analyses ML chargées !', 'success');
+                } else {
+                    throw new Error(data.message || 'Données invalides');
+                }
+            } catch (error) {
+                console.error(' Erreur ML:', error);
+                showMessage(' Erreur: ' + error.message, 'error');
+            } finally {
+                hideLoading();
+                btn.disabled = false;
+                btn.innerHTML = ' Recharger les Analyses ML';
+            }
+        }
+
+        function displayMLCharts(mlData) {
+            Object.values(mlChartsInstances).forEach(chart => chart && chart.destroy());
+            mlChartsInstances = {};
+
+            // Random Forest
+            if (mlData.randomForest && mlData.randomForest.length > 0) {
+                const ctx = document.getElementById('rfChart').getContext('2d');
+                mlChartsInstances.rf = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: mlData.randomForest.map(d => d.category || 'N/A'),
+                        datasets: [{
+                            data: mlData.randomForest.map(d => d.count || 0),
+                            backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: 'white' }, position: 'bottom' }
+                        }
+                    }
+                });
+            }
+
+            // XGBoost
+            if (mlData.xgboost && mlData.xgboost.length > 0) {
+                const ctx = document.getElementById('xgboostChart').getContext('2d');
+                mlChartsInstances.xgb = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: mlData.xgboost.map((d, i) => `V${i + 1}`),
+                        datasets: [
+                            {
+                                label: 'Prédit',
+                                data: mlData.xgboost.map(d => d.predicted || 0),
+                                borderColor: '#8b5cf6',
+                                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                fill: true
+                            },
+                            {
+                                label: 'Réel',
+                                data: mlData.xgboost.map(d => d.actual || 0),
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                fill: true
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                            x: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                        },
+                        plugins: { legend: { labels: { color: 'white' } } }
+                    }
+                });
+            }
+
+            // K-Means
+            if (mlData.kmeans && mlData.kmeans.length > 0) {
+                const clusters = [...new Set(mlData.kmeans.map(d => d.cluster))];
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+                
+                const ctx = document.getElementById('kmeansChart').getContext('2d');
+                mlChartsInstances.km = new Chart(ctx, {
+                    type: 'scatter',
+                    data: {
+                        datasets: clusters.map((c, i) => ({
+                            label: `Cluster ${c}`,
+                            data: mlData.kmeans.filter(d => d.cluster === c).map(d => ({ x: d.x || 0, y: d.y || 0 })),
+                            backgroundColor: colors[i % colors.length],
+                            pointRadius: 5
+                        }))
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { 
+                                ticks: { color: 'white' },
+                                title: { display: true, text: 'Km (norm)', color: 'white' },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            },
+                            x: { 
+                                ticks: { color: 'white' },
+                                title: { display: true, text: 'Prix (norm)', color: 'white' },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            }
+                        },
+                        plugins: { legend: { labels: { color: 'white' } } }
+                    }
+                });
+            }
+        }
+
+        // ============================================
+        // EDF/CDF
+        // ============================================
+        async function generateEDF() {
+            const variable = document.getElementById('variableSelect').value;
+            showLoading('Calcul EDF/CDF...');
+            try {
+                const response = await fetch(`${API_URL}/statistics/edf?variable=${variable}`);
+                const data = await response.json();
+                if (data.success) {
+                    displayEDFChart(data);
+                    showMessage(' Statistiques générées', 'success');
+                }
+            } catch (error) {
+                showMessage(' Erreur EDF/CDF', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayEDFChart(data) {
+            const ctx = document.getElementById('edfChart').getContext('2d');
+            if (mlChartsInstances.edf) mlChartsInstances.edf.destroy();
+            
+            mlChartsInstances.edf = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.data.map(d => d.value.toFixed(0)),
+                    datasets: [
+                        {
+                            label: 'EDF',
+                            data: data.data.map(d => d.edf),
+                            borderColor: '#3b82f6',
+                            stepped: true,
+                            fill: true
+                        },
+                        {
+                            label: 'CDF',
+                            data: data.data.map(d => d.cdf),
+                            borderColor: '#10b981',
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { ticks: { color: 'white' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                        x: { ticks: { color: 'white', maxTicksLimit: 15 }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                    },
+                    plugins: { legend: { labels: { color: 'white' } } }
+                }
+            });
+
+            document.getElementById('interpretation').innerHTML = `
+                <h4 class="font-semibold mb-2"> Interprétation</h4>
+                <p class="text-gray-300 mb-4">${data.interpretation}</p>
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="text-center">
+                        <div class="text-gray-400 text-sm">Moyenne</div>
+                        <div class="text-white font-bold text-lg">${data.statistics.mean.toLocaleString()}</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-gray-400 text-sm">Médiane</div>
+                        <div class="text-white font-bold text-lg">${data.statistics.percentiles.p50.toLocaleString()}</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-gray-400 text-sm">Min</div>
+                        <div class="text-white font-bold text-lg">${data.statistics.min.toLocaleString()}</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-gray-400 text-sm">Max</div>
+                        <div class="text-white font-bold text-lg">${data.statistics.max.toLocaleString()}</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('interpretation').classList.remove('hidden');
+        }
+
+        // ============================================
+        // UTILITAIRES
+        // ============================================
+        function showMessage(message, type = 'info') {
+            const msgDiv = document.getElementById('statusMessage');
+            const colors = {
+                success: 'bg-green-500/20 border-green-500 text-green-200',
+                error: 'bg-red-500/20 border-red-500 text-red-200',
+                warning: 'bg-yellow-500/20 border-yellow-500 text-yellow-200',
+                info: 'bg-blue-500/20 border-blue-500 text-blue-200'
+            };
+            msgDiv.className = `mb-6 p-4 glass rounded-lg border ${colors[type]}`;
+            msgDiv.textContent = message;
+            msgDiv.classList.remove('hidden');
+            setTimeout(() => msgDiv.classList.add('hidden'), 5000);
+        }
+
+        function showLoading(text = 'Chargement...') {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        // ============================================
+        // INITIALISATION
+        // ============================================
+        window.addEventListener('load', () => {
+            console.log(' VehicleSearch Pro - Application complète chargée');
+            showTab('search');
+            searchVehicles('');
+            loadGeneralStats();
+        });
+    </script>
+</body>
+</html>
