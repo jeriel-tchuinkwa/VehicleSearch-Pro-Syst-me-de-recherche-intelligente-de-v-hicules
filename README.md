@@ -1,0 +1,2 @@
+# VehicleSearch-Pro-Syst-me-de-recherche-intelligente-de-v-hicules
+Application intelligente de recherche et d’analyse de véhicules basée sur le Machine Learning et la recherche vectorielle (TF), utilisant une architecture microservices avec Node.js, Python et MongoDB. Elle intègre des modèles de classification, de segmentation et de prédiction de prix, ainsi qu’une API RESTful et des visualisations interactives.
